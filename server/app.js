@@ -39,7 +39,7 @@ async function requireAdmin(req, res, next) {
 }
 const audit = (admin, action, details = {}) => pool.execute('INSERT INTO audit_log (admin_id, action, details) VALUES (?, ?, ?)', [admin.id, action, JSON.stringify(details)]);
 const limiter = (limit, minutes) => rateLimit({ limit, windowMs: minutes * 60000, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many attempts. Please try again later.' } });
-app.get('/api/health', async (_req, res) => { try { await pool.query('SELECT 1'); res.json({ status: 'ok', database: 'connected' }); } catch { res.status(503).json({ status: 'unavailable', error: 'MySQL is unavailable. Check the database configuration.' }); } });
+app.get('/api/health', async (_req, res) => { try { const [[dbRow]] = await pool.query('SELECT DATABASE() AS db, @@hostname AS host'); const [[qRow]] = await pool.query('SELECT COUNT(*) AS questionnaires FROM questionnaires').catch(() => [[{ questionnaires: 'missing-table' }]]); res.json({ status: 'ok', database: 'connected', db: dbRow.db, host: dbRow.host, questionnaires: qRow.questionnaires }); } catch (error) { res.status(503).json({ status: 'unavailable', error: 'MySQL is unavailable. Check the database configuration.', detail: error.message }); } });
 app.post('/api/auth/login', limiter(10, 15), async (req, res) => {
   const { email, password } = req.body;
   if (typeof email !== 'string' || typeof password !== 'string' || password.length > 200) return res.status(400).json({ error: 'Enter your email and password.' });
