@@ -1,0 +1,13 @@
+import { randomBytes } from 'node:crypto';
+import { existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+if (existsSync('.env')) throw new Error('.env already exists. Local bootstrap will not overwrite credentials.');
+const dbPassword = randomBytes(24).toString('hex'), rootPassword = randomBytes(32).toString('hex'), adminPassword = randomBytes(18).toString('base64url');
+const mysql = process.env.MYSQL_BIN || 'C:/Program Files/MySQL/MySQL Server 8.0/bin/mysql.exe';
+const result = spawnSync(mysql, ['--no-defaults', '--host=127.0.0.1', '--port=3307', '--user=root'], { input: `CREATE DATABASE IF NOT EXISTS tenkipay CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci; CREATE USER 'tenkipay'@'localhost' IDENTIFIED BY '${dbPassword}'; GRANT ALL PRIVILEGES ON tenkipay.* TO 'tenkipay'@'localhost'; ALTER USER 'root'@'localhost' IDENTIFIED BY '${rootPassword}';`, encoding: 'utf8' });
+if (result.status !== 0) throw new Error(result.stderr || result.error?.message || 'MySQL bootstrap failed.');
+writeFileSync('.env', `NODE_ENV=development\nPORT=3001\nAPP_ORIGIN=http://localhost:5173\nMYSQL_HOST=127.0.0.1\nMYSQL_PORT=3307\nMYSQL_DATABASE=tenkipay\nMYSQL_USER=tenkipay\nMYSQL_PASSWORD=${dbPassword}\nADMIN_EMAIL=admin@tenkipay.local\nADMIN_PASSWORD=${adminPassword}\nTRUST_PROXY=false\nADREHS_CREATE_URL=https://api.adrehs.org/addresses/generate\n`);
+mkdirSync('.local', { recursive: true });
+writeFileSync('.local/mysql-admin.json', JSON.stringify({ host: '127.0.0.1', port: 3307, user: 'root', password: rootPassword }, null, 2));
+writeFileSync('.local/LOGIN.txt', `TenkiPay local administrator\n\nURL: http://localhost:5173/admin\nEmail: admin@tenkipay.local\nPassword: ${adminPassword}\n\nThese credentials are for this local installation only. Keep this file private.\n`);
+console.log('Local MySQL secured. Configuration saved in .env. Admin sign-in details saved in .local/LOGIN.txt.');

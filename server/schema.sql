@@ -1,0 +1,44 @@
+CREATE TABLE IF NOT EXISTS questionnaires (
+  id INT PRIMARY KEY,
+  version INT NOT NULL DEFAULT 1,
+  schema_json JSON NOT NULL,
+  accepting BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS questionnaire_versions (
+  version INT PRIMARY KEY,
+  schema_json JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS admins (
+  id INT PRIMARY KEY AUTO_INCREMENT,
+  email VARCHAR(254) NOT NULL UNIQUE,
+  password_hash VARCHAR(255) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+  token_hash CHAR(64) PRIMARY KEY,
+  admin_id INT NOT NULL,
+  expires_at DATETIME NOT NULL,
+  FOREIGN KEY (admin_id) REFERENCES admins(id) ON DELETE CASCADE,
+  INDEX (expires_at)
+);
+CREATE TABLE IF NOT EXISTS submissions (
+  id CHAR(36) PRIMARY KEY,
+  request_key CHAR(36) NOT NULL UNIQUE,
+  questionnaire_version INT NOT NULL,
+  answers JSON NOT NULL,
+  interest VARCHAR(40),
+  district VARCHAR(100),
+  contact_consent BOOLEAN NOT NULL DEFAULT FALSE,
+  gps_review BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (questionnaire_version) REFERENCES questionnaire_versions(version),
+  INDEX (created_at), INDEX (district), INDEX (interest)
+);
+CREATE TABLE IF NOT EXISTS audit_log (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  admin_id INT,
+  action VARCHAR(100) NOT NULL,
+  details JSON,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
