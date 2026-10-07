@@ -166,6 +166,6 @@ if (existsSync(path.resolve('dist/index.html'))) { app.use(express.static(path.r
 app.use((error, _req, res, _next) => {
   if (res.headersSent) return res.end();
   const status = error.status || (error.code?.startsWith('ER_') || error.code === 'ECONNREFUSED' ? 503 : error.name === 'TimeoutError' ? 504 : 500);
-  console.error('Request failed:', error.code || error.name, status);
+  console.error('Request failed:', error.code || error.name, status, error.message, error.stack);
   res.status(status).json({ error: status < 500 || error.status ? error.message : status === 503 ? 'The database is unavailable. Please try again shortly.' : 'The request could not be completed. Please try again.' });
 });
