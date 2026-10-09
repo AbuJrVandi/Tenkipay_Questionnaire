@@ -2,9 +2,12 @@ import 'dotenv/config';
 import { app } from './app.js';
 import { pool, databaseDriver, getQuestionnaire } from './db.js';
 import { ensureSchema } from './schema.js';
+import { applyQuestionnaireRelease } from './questionnaire-release.js';
 try {
   await ensureSchema(pool, databaseDriver);
   await getQuestionnaire();
+  const release = await applyQuestionnaireRelease(pool);
+  if (release.changed) console.log(`Published agent network questionnaire v${release.version}.`);
 } catch (error) {
   console.error('Database startup failed. Check database settings and run npm run db:setup.', error.code || error.message);
   await pool.end();

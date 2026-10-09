@@ -157,8 +157,25 @@ If you change the public domain, update `APP_ORIGIN` and `VITE_PUBLIC_FORM_URL`,
 | Adrehs creation fails | Server internet access, API response and Sierra Leone location coverage |
 | QR still uses the old address | Set `VITE_PUBLIC_FORM_URL`, rebuild and generate a new QR |
 
-## Current status
+## Render deployment and updates
 
-The application is built and tested locally. A public deployment has not been configured. Hosting, production MySQL, a domain and HTTPS are still needed before public sharing.
+The live service is https://tenkipay-questionnaire.onrender.com. Configure the existing Render web service with:
+
+- Branch: `main`.
+- Build command: `npm ci --include=dev && npm test && npm run build`.
+- Start command: `npm start`.
+- Health check: `/api/health`.
+- Environment: `NODE_ENV=production`, `DB_DRIVER=mysql`, the production `MYSQL_*` settings, and `APP_ORIGIN=https://tenkipay-questionnaire.onrender.com`.
+- Enable automatic deploys for the linked branch.
+
+Render runs its build and start commands when deploying the linked repository. See [Render deployment documentation](https://render.com/docs/deploys).
+
+`npm start` rebuilds the frontend before launching the server, including when the host only installed dependencies during its build step. Startup adds missing tables and applies the versioned agent-network questionnaire release before serving requests. The upgrade replaces the legacy interest questionnaire with the repository's 96-field, seven-section network questionnaire; Overview and Analytics then use the network-profile layout. Existing submissions retain their original questionnaire version, and a paused collection remains paused.
+
+The release is recorded once in `app_migrations`. Subsequent deploys preserve administrator edits. A database error rolls the upgrade back and prevents the new server from accepting requests. Existing installations already using the network template keep their saved customizations.
+
+Source changes and database edits are different: pushing deploys code and explicitly versioned questionnaire releases. Saving changes in a localhost editor only updates its development database. It does not publish those edits or copy sample responses to production. Production statistics come from production submissions. Future template releases should be reviewed in source and given a new release migration that explicitly defines their upgrade behavior.
+
+After deployment, `/api/public/questionnaire` should report `template: "existing-agent-network"`, 96 questions and seven sections for this release. Its database version can differ from localhost because each environment has its own version history. Refresh an already-open browser tab after Render finishes deploying; HTML responses are marked `no-store` to fetch the current asset references.
 
 On every server start, missing database tables are created before the API accepts requests. This includes Adrehs registration storage for older installations. Existing questionnaires, published versions, accounts and responses are preserved. Production requires MySQL; SQLite is restricted to development. The database user needs CREATE TABLE permission for upgrades.

@@ -57,7 +57,7 @@ Selecting **Yes** to participation starts GPS capture. A valid reading is requir
 
 The current **Agent Network Profile and Experience Questionnaire** uses seven sections (A–G), reporting-period skip rules, revenue collection details, repeatable institution rows, operational experience, support and verification. GPS remains mandatory immediately after participation consent; the draft's optional question 37 is covered by this existing location flow. A calculated daily revenue average is stored separately from a typical-day estimate. Earlier applications remain accessible through their original versions.
 
-The local replacement has been applied. To apply it to another configured database, run `node scripts/replace-network-profile.mjs`. The script creates a new version, preserves existing GPS and Adrehs fields and collection status, and leaves earlier versions and responses intact. It makes no changes when the existing-agent template is already installed.
+The deployed server automatically upgrades the legacy questionnaire to the existing-agent network template on startup. The release creates a new version, preserves collection status and historical responses, and is recorded once so subsequent deploys retain administrator edits. The Overview and Analytics layouts follow the saved template. See [Render deployment and updates](DEPLOYMENT.md#render-deployment-and-updates) for the production commands and how database edits differ from source releases.
 
 Adrehs registration has a separate public-location permission. Select **Create Adrehs code** to register the captured point. The returned code and location details are stored with the submitted response and included in exports. The registry entry can exist even if the respondent later abandons the form.
 

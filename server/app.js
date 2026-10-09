@@ -164,7 +164,7 @@ app.get('/api/admin/export/:format', async (req, res) => {
   res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); await book.xlsx.write(res); res.end();
 });
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
-if (existsSync(path.resolve('dist/index.html'))) { app.use(express.static(path.resolve('dist'))); app.get('/{*path}', (_req, res) => res.sendFile(path.resolve('dist/index.html'))); }
+if (existsSync(path.resolve('dist/index.html'))) { app.use(express.static(path.resolve('dist'), { setHeaders(res, file) { if (file.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store'); } })); app.get('/{*path}', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.resolve('dist/index.html')); }); }
 app.use((error, _req, res, _next) => {
   if (res.headersSent) return res.end();
   const status = error.status || (error.code?.startsWith('ER_') || error.code === 'ECONNREFUSED' ? 503 : error.name === 'TimeoutError' ? 504 : 500);
