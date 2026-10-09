@@ -1,0 +1,13 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE IF NOT EXISTS questionnaires (id INTEGER PRIMARY KEY, version INTEGER NOT NULL DEFAULT 1, schema_json TEXT NOT NULL CHECK(json_valid(schema_json)), accepting INTEGER NOT NULL DEFAULT 1, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS questionnaire_versions (version INTEGER PRIMARY KEY, schema_json TEXT NOT NULL CHECK(json_valid(schema_json)), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS admins (id INTEGER PRIMARY KEY AUTOINCREMENT, email TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sessions (token_hash TEXT PRIMARY KEY, admin_id INTEGER NOT NULL REFERENCES admins(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS submissions (id TEXT PRIMARY KEY, request_key TEXT NOT NULL UNIQUE, questionnaire_version INTEGER NOT NULL REFERENCES questionnaire_versions(version), answers TEXT NOT NULL CHECK(json_valid(answers)), interest TEXT, district TEXT, contact_consent INTEGER NOT NULL DEFAULT 0, gps_review INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, admin_id INTEGER, action TEXT NOT NULL, details TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS adrehs_registrations (id TEXT PRIMARY KEY, gps_json TEXT NOT NULL CHECK(json_valid(gps_json)), address_json TEXT NOT NULL CHECK(json_valid(address_json)), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS sessions_expiry ON sessions(expires_at);
+CREATE INDEX IF NOT EXISTS submissions_created ON submissions(created_at);
+CREATE INDEX IF NOT EXISTS submissions_district ON submissions(district);
+CREATE INDEX IF NOT EXISTS submissions_interest ON submissions(interest);
+CREATE TRIGGER IF NOT EXISTS questionnaires_updated AFTER UPDATE OF schema_json, version, accepting ON questionnaires BEGIN UPDATE questionnaires SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id; END;

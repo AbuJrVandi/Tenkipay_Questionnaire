@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import { chromium } from '@playwright/test';
+const browser = await chromium.launch({ channel: 'msedge', headless: true });
+try {
+  const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
+  const page = await context.newPage();
+  const errors = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('http://localhost:5173/admin');
+  await page.getByLabel('Email address').fill('test@tenkipay.test');
+  await page.getByLabel('Password', { exact: true }).fill('password123');
+  await page.getByRole('button', { name: 'Sign in to workspace' }).click();
+  await page.getByText('Profile responses', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Share form', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByRole('heading', { name: 'Share your questionnaire' }).waitFor();
+  await dialog.getByRole('img', { name: 'QR code linking to the TenkiPay questionnaire' }).waitFor();
+  assert.equal(await dialog.getByLabel('Respondent link').inputValue(), 'http://localhost:5173/form');
+  await dialog.getByRole('button', { name: 'Copy', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Copied', exact: true }).waitFor();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'http://localhost:5173/form');
+  const download = page.waitForEvent('download');
+  await dialog.getByRole('button', { name: 'Download QR code' }).click();
+  assert.equal((await download).suggestedFilename(), 'tenkipay-questionnaire-qr.png');
+  await dialog.getByRole('button', { name: 'Close dialog' }).click();
+  await page.getByRole('button', { name: 'Share questionnaire', exact: true }).click();
+  await dialog.getByRole('heading', { name: 'Share your questionnaire' }).waitFor();
+  await dialog.getByRole('button', { name: 'Close dialog' }).click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Share form', exact: true }).click();
+  await dialog.getByRole('img', { name: 'QR code linking to the TenkiPay questionnaire' }).waitFor();
+  assert.ok(await dialog.evaluate(element => element.getBoundingClientRect().width <= innerWidth));
+  assert.deepEqual(errors, []);
+  console.log('Verified both share buttons, questionnaire title, respondent link, clipboard copy, QR download and mobile dialog. No browser errors.');
+} finally { await browser.close(); }

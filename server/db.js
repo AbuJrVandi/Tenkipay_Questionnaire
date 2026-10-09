@@ -1,6 +1,9 @@
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-export const pool = mysql.createPool({
+import { createSqlitePool } from './sqlite.js';
+export const databaseDriver = process.env.DB_DRIVER || 'mysql';
+if (!['sqlite', 'mysql'].includes(databaseDriver)) throw new Error('DB_DRIVER must be sqlite or mysql.');
+export const pool = databaseDriver === 'sqlite' ? createSqlitePool(process.env.SQLITE_PATH || '.local/tenkipay.sqlite') : mysql.createPool({
   host: process.env.MYSQL_HOST || '127.0.0.1', port: Number(process.env.MYSQL_PORT || 3306),
   user: process.env.MYSQL_USER, password: process.env.MYSQL_PASSWORD,
   database: process.env.MYSQL_DATABASE || 'tenkipay', connectionLimit: 10,

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { initialQuestionnaire as schema, cleanAnswers, validateAnswers, isVisible } from '../shared/questionnaire.js';
+import { legacyQuestionnaire as schema, cleanAnswers, validateAnswers, isVisible } from '../shared/questionnaire.js';
 import { currentAgent } from './fixtures.js';
 import { aggregate, csvCell, exportColumns } from '../server/analytics.js';
 import { generateAddress } from '../server/adrehs.js';

@@ -4,7 +4,7 @@ This guide takes the local application online so people can open the form on the
 
 ## 1. What you need
 
-- A host that runs a **Node.js server**, with Node.js 22.12 or newer. Node.js 24 is used locally.
+- A host that runs a **Node.js server**, with Node.js 24 or newer. Node.js 24 is used locally.
 - A **MySQL 8** database.
 - A public domain with **HTTPS**.
 - Outbound HTTPS access from the server to `api.adrehs.org`.
@@ -20,6 +20,8 @@ Upload the source files, including `package.json`, `package-lock.json`, `src/`, 
 **Exclude:** `.env`, `.local/`, `node_modules/` and local credentials. Do not run the local bootstrap or local migration scripts on production. The host installs dependencies itself.
 
 ## 3. Create the database
+
+This guide uses MySQL hosting. Set `DB_DRIVER=mysql` in the hosted environment; the local `.env` uses SQLite and must not be uploaded.
 
 In your host?s database panel:
 
