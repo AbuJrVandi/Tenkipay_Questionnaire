@@ -50,6 +50,7 @@ PORT=3001
 APP_ORIGIN=https://survey.your-domain.com
 VITE_PUBLIC_FORM_URL=https://survey.your-domain.com/form
 
+DB_DRIVER=mysql
 MYSQL_HOST=your-database-host
 MYSQL_PORT=3306
 MYSQL_DATABASE=tenkipay
@@ -159,3 +160,5 @@ If you change the public domain, update `APP_ORIGIN` and `VITE_PUBLIC_FORM_URL`,
 ## Current status
 
 The application is built and tested locally. A public deployment has not been configured. Hosting, production MySQL, a domain and HTTPS are still needed before public sharing.
+
+On every server start, missing database tables are created before the API accepts requests. This includes Adrehs registration storage for older installations. Existing questionnaires, published versions, accounts and responses are preserved. Production requires MySQL; SQLite is restricted to development. The database user needs CREATE TABLE permission for upgrades.

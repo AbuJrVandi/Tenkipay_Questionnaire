@@ -73,7 +73,7 @@ Local `.env` uses `DB_DRIVER=sqlite` and `SQLITE_PATH=.local/tenkipay.sqlite`. T
 
 Existing MySQL data was copied to SQLite for this local installation. The original MySQL database was left intact and is no longer used locally. `node scripts/migrate-local-sqlite.mjs` performs a verified one-time copy on another configured MySQL installation and refuses to overwrite a populated SQLite database.
 
-MySQL hosting remains supported by setting `DB_DRIVER=mysql` and the `MYSQL_*` settings. See the deployment guide before publishing.
+Production uses the configured MySQL database for questionnaires, published versions, responses, accounts and Adrehs registrations. Set `DB_DRIVER=mysql` and the `MYSQL_*` settings on the host; SQLite is restricted to development. Startup creates missing tables before accepting requests and preserves existing data. See the deployment guide before publishing.
 
 ## Project files
 

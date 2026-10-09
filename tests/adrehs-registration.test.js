@@ -20,10 +20,10 @@ test('successful Adrehs reply is persisted and trusted metadata is restored on s
   await assert.rejects(() => verifiedRegistration(result, { ...gps, latitude: 9 }, database), /current captured location/);
   await assert.rejects(() => verifiedRegistration({ ...result, code: 'OTHER' }, gps, database), /current captured location/);
 });
-test('unconfirmed registration and local persistence failures are explicit', async () => {
+test('unconfirmed registration and database persistence failures are explicit', async () => {
   await assert.rejects(() => verifiedRegistration({}, gps, {}), /Create an Adrehs code/);
   await assert.rejects(() => verifiedRegistration({ registrationId: 'missing' }, gps, { execute: async () => [[]] }), /Create an Adrehs code/);
-  await assert.rejects(() => registerAddress(gps, { execute: async () => { throw new Error('Database offline'); } }, upstream), /could not save it locally/);
+  await assert.rejects(() => registerAddress(gps, { execute: async () => { throw new Error('Database offline'); } }, upstream), /could not be saved to the questionnaire database/);
   await assert.rejects(() => registerAddress(gps, {}, async () => ({ ok: true, json: async () => ({ code: ' ' }) })), /unexpected response/);
 });
 test('numbering follows the stored order and preserves stable identities', () => {

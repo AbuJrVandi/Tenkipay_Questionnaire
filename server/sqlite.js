@@ -54,6 +54,11 @@ export function createSqlitePool(filename) {
   async function execute(sql, parameters) { const unlock = await acquire(); try { return run(sql, parameters); } finally { unlock(); } }
   return {
     driver: 'sqlite', filename, query: execute, execute,
+    async initializeSchema() {
+      const unlock = await acquire();
+      try { database.exec(readFileSync(new URL('./sqlite-schema.sql', import.meta.url), 'utf8')); }
+      finally { unlock(); }
+    },
     async getConnection() {
       const unlock = await acquire(); let active = false, released = false;
       return {

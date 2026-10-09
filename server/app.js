@@ -42,7 +42,7 @@ async function requireAdmin(req, res, next) {
 }
 const audit = (admin, action, details = {}) => pool.execute('INSERT INTO audit_log (admin_id, action, details) VALUES (?, ?, ?)', [admin.id, action, JSON.stringify(details)]);
 const limiter = (limit, minutes) => rateLimit({ limit, windowMs: minutes * 60000, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many attempts. Please try again later.' } });
-app.get('/api/health', async (_req, res) => { try { await pool.query('SELECT 1'); res.json({ status: 'ok', database: 'connected', storage: databaseDriver }); } catch { res.status(503).json({ status: 'unavailable', error: 'The database is unavailable. Check the local database configuration.' }); } });
+app.get('/api/health', async (_req, res) => { try { await pool.query('SELECT 1'); res.json({ status: 'ok', database: 'connected', storage: databaseDriver }); } catch { res.status(503).json({ status: 'unavailable', error: 'The database is unavailable. Please contact the questionnaire administrator.' }); } });
 app.post('/api/auth/login', limiter(10, 15), async (req, res) => {
   const { email, password } = req.body;
   if (typeof email !== 'string' || typeof password !== 'string' || password.length > 200) return res.status(400).json({ error: 'Enter your email and password.' });
@@ -168,6 +168,6 @@ if (existsSync(path.resolve('dist/index.html'))) { app.use(express.static(path.r
 app.use((error, _req, res, _next) => {
   if (res.headersSent) return res.end();
   const status = error.status || (error.code?.startsWith('ER_') || error.code === 'ECONNREFUSED' ? 503 : error.name === 'TimeoutError' ? 504 : 500);
-  console.error('Request failed:', error.code || error.name, status, error.message, error.stack);
+  console.error('Request failed:', error.code || error.name, status, error.message, error.stack, error.cause);
   res.status(status).json({ error: status < 500 || error.status ? error.message : status === 503 ? 'The database is unavailable. Please try again shortly.' : 'The request could not be completed. Please try again.' });
 });

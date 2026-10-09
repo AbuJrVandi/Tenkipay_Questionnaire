@@ -19,8 +19,8 @@ export async function registerAddress(gps, database, fetcher = fetch) {
   const saved = { ...address, registrationId };
   try {
     await database.execute('INSERT INTO adrehs_registrations (id, gps_json, address_json) VALUES (?, ?, ?)', [registrationId, JSON.stringify(gps), JSON.stringify(saved)]);
-  } catch {
-    throw Object.assign(new Error('Adrehs returned an address, but we could not save it locally. Keep this location and retry; Adrehs may already have registered this point.'), { status: 503 });
+  } catch (cause) {
+    throw Object.assign(new Error('Adrehs confirmed this address, but it could not be saved to the questionnaire database. Keep this location and retry when the service is available. The address may already exist on Adrehs.', { cause }), { status: 503 });
   }
   return saved;
 }
