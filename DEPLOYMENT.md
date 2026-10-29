@@ -65,12 +65,16 @@ ADREHS_API_KEY=
 | `VITE_PUBLIC_FORM_URL` | The complete public form URL; set it before building |
 | `DATABASE_URL` | Your PostgreSQL connection string; URL-encode special characters in the password |
 | `DATABASE_SSL` | `true` if your provider requires verified database TLS; otherwise `false` |
+| `DATABASE_SSL_CA` | The provider's CA certificate when it is not publicly trusted, such as Aiven |
+| `DATABASE_SSL_REJECT_UNAUTHORIZED` | Leave unset for verified TLS; set `false` only as a temporary, less secure workaround |
 | `ADMIN_EMAIL` | The administrator email for the new database |
 | `ADMIN_PASSWORD` | A unique password of at least 14 characters |
 | `TRUST_PROXY` | `true` only when exactly one trusted reverse proxy sits in front of Express |
 | `ADREHS_API_KEY` | Leave empty unless Adrehs supplies a key for your integration |
 
-Some providers require TLS in the connection string instead of `DATABASE_SSL`; in that case append `?sslmode=require` to `DATABASE_URL`. The application also accepts `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` and `PGPASSWORD` instead of `DATABASE_URL`.
+Some providers require TLS. When `DATABASE_SSL` is set, it takes precedence over SSL options in `DATABASE_URL`. For a provider with a private CA, such as Aiven, download the service's CA certificate and set `DATABASE_SSL=true` plus `DATABASE_SSL_CA` to the full PEM contents. The application also accepts `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` and `PGPASSWORD` instead of `DATABASE_URL`.
+
+Render's internal PostgreSQL URL does not need TLS: use it without `?sslmode=require` and keep `DATABASE_SSL=false`.
 
 Do not use the local `password123` login in production. Confirm the host's proxy arrangement before setting `TRUST_PROXY`; it affects client IP detection and rate limiting.
 
