@@ -21,6 +21,7 @@ const config = process.env.DATABASE_URL
     };
 
 export const pool = new Pool(config);
+export const databaseDriver = 'postgres';
 export const parseJson = value => typeof value === 'string' ? JSON.parse(value) : value;
 export async function getQuestionnaire(connection = pool) {
   const { rows } = await connection.query('SELECT * FROM questionnaires WHERE id = 1');

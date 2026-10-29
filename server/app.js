@@ -1,3 +1,6 @@
+import { deleteResponses } from './response-deletion.js';
+import { numberQuestions } from '../shared/numbering.js';
+import { prepareQuestions } from '../shared/editor.js';
 import express from 'express';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
@@ -7,10 +10,10 @@ import { randomBytes, randomUUID, createHash } from 'node:crypto';
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 import ExcelJS from 'exceljs';
-import { pool, getQuestionnaire, parseJson } from './db.js';
-import { cleanAnswers, validateAnswers, initialQuestionnaire } from '../shared/questionnaire.js';
+import { pool, getQuestionnaire, parseJson, databaseDriver } from './db.js';
+import { cleanAnswers, validateAnswers } from '../shared/questionnaire.js';
 import { aggregate, exportColumns, csvCell, safeCell } from './analytics.js';
-import { generateAddress } from './adrehs.js';
+import { registerAddress, verifiedRegistration } from './adrehs.js';
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 const cookieOptions = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' };
@@ -39,7 +42,7 @@ async function requireAdmin(req, res, next) {
 }
 const audit = (admin, action, details = {}) => pool.query('INSERT INTO audit_log (admin_id, action, details) VALUES ($1, $2, $3)', [admin.id, action, JSON.stringify(details)]);
 const limiter = (limit, minutes) => rateLimit({ limit, windowMs: minutes * 60000, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'Too many attempts. Please try again later.' } });
-app.get('/api/health', async (_req, res) => { try { await pool.query('SELECT 1'); res.json({ status: 'ok', database: 'connected' }); } catch { res.status(503).json({ status: 'unavailable', error: 'PostgreSQL is unavailable. Check the database configuration.' }); } });
+app.get('/api/health', async (_req, res) => { try { await pool.query('SELECT 1'); res.json({ status: 'ok', database: 'connected', storage: databaseDriver }); } catch { res.status(503).json({ status: 'unavailable', error: 'The database is unavailable. Please contact the questionnaire administrator.' }); } });
 app.post('/api/auth/login', limiter(10, 15), async (req, res) => {
   const { email, password } = req.body;
   if (typeof email !== 'string' || typeof password !== 'string' || password.length > 200) return res.status(400).json({ error: 'Enter your email and password.' });
@@ -70,9 +73,10 @@ app.post('/api/public/submissions', limiter(30, 15), async (req, res) => {
     const cleaned = cleanAnswers(schema, answers);
     const errors = validateAnswers(schema, cleaned);
     if (Object.keys(errors).length) { await connection.query('ROLLBACK'); return res.status(422).json({ error: 'Please check the highlighted answers.', fields: errors }); }
+    if (cleaned.adrehs) cleaned.adrehs = await verifiedRegistration(cleaned.adrehs, cleaned.outletGps, connection);
     const id = randomUUID();
     const review = cleaned.consent === 'Yes' && (cleaned.outletGps ? cleaned.outletGps.accuracy > 30 : ['Yes', 'Maybe'].includes(cleaned.interest));
-    await connection.query('INSERT INTO submissions (id, request_key, questionnaire_version, answers, interest, district, contact_consent, gps_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [id, requestKey, version, JSON.stringify(cleaned), cleaned.interest || null, cleaned.district || null, cleaned.contactConsent === 'Yes', review]);
+    await connection.query('INSERT INTO submissions (id, request_key, questionnaire_version, answers, interest, district, contact_consent, gps_review) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', [id, requestKey, version, JSON.stringify(cleaned), cleaned.interest || null, cleaned.district || null, Boolean(cleaned.contactConsent === 'Yes' || cleaned.net_followup?.startsWith('Yes')), review]);
     await connection.query('COMMIT'); res.status(201).json({ id });
   } catch (error) {
     await connection.query('ROLLBACK');
@@ -86,25 +90,21 @@ app.post('/api/public/adrehs', limiter(10, 15), async (req, res) => {
   if (!gps || !Number.isFinite(gps.latitude) || !Number.isFinite(gps.longitude) || !Number.isFinite(gps.accuracy) || gps.accuracy < 0 || gps.latitude < -90 || gps.latitude > 90 || gps.longitude < -180 || gps.longitude > 180) return res.status(422).json({ error: 'Capture a valid outlet GPS point first.' });
   const schema = await getQuestionnaire();
   if (!schema.accepting) return res.status(409).json({ error: 'The form is closed.' });
-  res.json(await generateAddress(gps));
+  res.json(await registerAddress(gps, pool));
 });
 app.use('/api/admin', requireAdmin);
 app.get('/api/admin/questionnaire', async (_req, res) => res.json(await getQuestionnaire()));
 app.put('/api/admin/questionnaire', async (req, res) => {
   const input = req.body;
-  if (typeof input.title !== 'string' || input.title.trim().length < 5 || input.title.length > 200 || typeof input.description !== 'string' || input.description.length > 3000 || typeof input.notice !== 'string' || input.notice.length > 3000 || typeof input.accepting !== 'boolean' || !Array.isArray(input.questions) || input.questions.length !== initialQuestionnaire.questions.length) return res.status(422).json({ error: 'Check the form title, description and questions.' });
+  if (typeof input.title !== 'string' || input.title.trim().length < 5 || input.title.length > 200 || typeof input.description !== 'string' || input.description.length > 3000 || typeof input.notice !== 'string' || input.notice.length > 3000 || typeof input.accepting !== 'boolean' || !Array.isArray(input.questions) || input.questions.length > 200) return res.status(422).json({ error: 'Check the form title, description and questions.' });
   const connection = await pool.connect();
   try {
     await connection.query('BEGIN');
     await connection.query('SELECT id FROM questionnaires WHERE id = 1 FOR UPDATE');
     const current = await getQuestionnaire(connection);
     if (input.version !== current.version) { await connection.query('ROLLBACK'); return res.status(409).json({ error: 'Another update was saved. Reload the editor before saving.' }); }
-    const questions = current.questions.map(q => {
-      const edit = input.questions.find(item => item.id === q.id);
-      if (!edit || typeof edit.label !== 'string' || !edit.label.trim() || edit.label.length > 600 || (edit.help != null && (typeof edit.help !== 'string' || edit.help.length > 1000))) throw Object.assign(new Error('Each question needs a label of up to 600 characters.'), { status: 422 });
-      return { ...q, label: edit.label.trim(), help: edit.help || '' };
-    });
-    const schema = { title: input.title.trim(), description: input.description.trim(), notice: input.notice.trim(), questions };
+    const questions = prepareQuestions(input.questions, current.questions, current.sections).map(q => current.template === 'existing-agent-network' ? { ...q, profile: true } : q);
+    const schema = { ...current, title: input.title.trim(), description: input.description.trim(), notice: input.notice.trim(), questions: numberQuestions(questions) };
     const version = current.version + 1;
     await connection.query('INSERT INTO questionnaire_versions (version, schema_json) VALUES ($1, $2)', [version, JSON.stringify(schema)]);
     await connection.query('UPDATE questionnaires SET schema_json = $1, version = $2, accepting = $3 WHERE id = 1', [JSON.stringify(schema), version, input.accepting]);
@@ -122,7 +122,7 @@ function filters(query) {
   if (query.search) { if (typeof query.search !== 'string' || query.search.length > 100) throw Object.assign(new Error('Search is too long.'), { status: 400 }); params.push(`%${query.search.toLowerCase()}%`); conditions.push(`(LOWER(answers->>'applicantName') LIKE $${params.length} OR LOWER(answers->>'businessName') LIKE $${params.length})`); }
   return { where: conditions.length ? ' WHERE ' + conditions.join(' AND ') : '', params };
 }
-async function allRows(query) { const { where, params } = filters(query); const { rows } = await pool.query('SELECT * FROM submissions' + where + ' ORDER BY created_at DESC, id DESC', params); return rows.map(r => ({ ...r, answers: parseJson(r.answers) })); }
+async function allRows(query) { const { where, params } = filters(query); const { rows } = await pool.query('SELECT submissions.*, (SELECT schema_json->>\'template\' FROM questionnaire_versions WHERE version = submissions.questionnaire_version) AS template FROM submissions' + where + ' ORDER BY created_at DESC, id DESC', params); return rows.map(r => ({ ...r, answers: parseJson(r.answers) })); }
 app.get('/api/admin/analytics', async (req, res) => res.json(aggregate(await allRows(req.query), await getQuestionnaire())));
 app.get('/api/admin/responses', async (req, res) => {
   const { where, params } = filters(req.query);
@@ -131,6 +131,8 @@ app.get('/api/admin/responses', async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM submissions' + where + ` ORDER BY created_at DESC, id DESC LIMIT 20 OFFSET $${params.length + 1}`, [...params, (page - 1) * 20]);
   res.json({ total: Number(count.rows[0].total), page, pageSize: 20, rows: rows.map(r => ({ ...r, answers: parseJson(r.answers) })) });
 });
+app.post('/api/admin/responses/delete', async (req, res) => res.json(await deleteResponses(pool, req.body.ids, req.admin.id)));
+app.delete('/api/admin/responses/:id', async (req, res) => res.json(await deleteResponses(pool, [req.params.id], req.admin.id)));
 app.get('/api/admin/responses/:id', async (req, res) => {
   const { rows } = await pool.query('SELECT s.*, v.schema_json FROM submissions s JOIN questionnaire_versions v ON v.version = s.questionnaire_version WHERE s.id = $1', [req.params.id]);
   if (!rows.length) return res.status(404).json({ error: 'Response not found.' });
@@ -162,11 +164,11 @@ app.get('/api/admin/export/:format', async (req, res) => {
   res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); await book.xlsx.write(res); res.end();
 });
 app.use('/api', (_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
-if (existsSync(path.resolve('dist/index.html'))) { app.use(express.static(path.resolve('dist'))); app.get('/{*path}', (_req, res) => res.sendFile(path.resolve('dist/index.html'))); }
+if (existsSync(path.resolve('dist/index.html'))) { app.use(express.static(path.resolve('dist'), { setHeaders(res, file) { if (file.endsWith('index.html')) res.setHeader('Cache-Control', 'no-store'); } })); app.get('/{*path}', (_req, res) => { res.setHeader('Cache-Control', 'no-store'); res.sendFile(path.resolve('dist/index.html')); }); }
 app.use((error, _req, res, _next) => {
   if (res.headersSent) return res.end();
   const databaseUnavailable = ['ECONNREFUSED', 'ETIMEDOUT', '57P03', '3D000', '28P01', '28000'].includes(error.code);
   const status = error.status || (databaseUnavailable ? 503 : error.name === 'TimeoutError' ? 504 : 500);
-  console.error('Request failed:', error.code || error.name, status, error.message, error.stack);
+  console.error('Request failed:', error.code || error.name, status, error.message, error.stack, error.cause);
   res.status(status).json({ error: status < 500 || error.status ? error.message : status === 503 ? 'The database is unavailable. Please try again shortly.' : 'The request could not be completed. Please try again.' });
 });

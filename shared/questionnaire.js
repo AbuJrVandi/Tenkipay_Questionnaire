@@ -1,3 +1,4 @@
+import { createNetworkProfile, profileVisible, dailyAverage } from './network-profile.js';
 const single = (id, number, section, label, options, extra = {}) => ({ id, number, section, label, type: 'single', options, required: true, ...extra });
 const field = (id, number, section, label, extra = {}) => ({ id, number, section, label, type: 'text', required: true, ...extra });
 export const sections = [
@@ -10,7 +11,7 @@ export const sections = [
 ];
 export const districts = ['Bo', 'Bombali', 'Bonthe', 'Falaba', 'Kailahun', 'Kambia', 'Karene', 'Kenema', 'Koinadugu', 'Kono', 'Moyamba', 'Port Loko', 'Pujehun', 'Tonkolili', 'Western Area Rural', 'Western Area Urban'];
 const activity = ['Fewer than 20', '20–49', '50–99', '100 or more', 'Unsure'];
-export const initialQuestionnaire = {
+export const legacyQuestionnaire = {
   title: 'TenkiPay Agent Interest and Readiness Questionnaire',
   description: '',
   notice: 'Completing this questionnaire does not guarantee appointment or commit you to becoming an agent. Agent requirements, services and commission terms will be explained before you decide to proceed.',
@@ -60,16 +61,19 @@ export const initialQuestionnaire = {
 
 // Location is collected before agent interest, immediately after participation consent.
 const locationIds = ['onSite', 'gpsConsent', 'gpsStatus', 'outletGps', 'gpsFailureReason', 'adrehs'];
-const locationQuestions = locationIds.map(id => ({ ...initialQuestionnaire.questions.find(q => q.id === id), section: 'A', number: '1', ...(id === 'adrehs' ? { help: 'Confirm the captured point and public registry permission, then create its Adrehs code.' } : {}) }));
-initialQuestionnaire.questions = [initialQuestionnaire.questions[0], ...locationQuestions, ...initialQuestionnaire.questions.slice(1).filter(q => !locationIds.includes(q.id))];
+const locationQuestions = locationIds.map(id => ({ ...legacyQuestionnaire.questions.find(q => q.id === id), section: 'A', number: '1', ...(id === 'adrehs' ? { help: 'Confirm the captured point and public registry permission, then create its Adrehs code.' } : {}) }));
+legacyQuestionnaire.questions = [legacyQuestionnaire.questions[0], ...locationQuestions, ...legacyQuestionnaire.questions.slice(1).filter(q => !locationIds.includes(q.id))];
 
 export function requireLocation(schema) {
   const removed = ['onSite', 'gpsConsent', 'gpsStatus', 'gpsFailureReason'];
   return { ...schema, questions: schema.questions.filter(q => !removed.includes(q.id)).map(q => q.id === 'consent' ? { ...q, help: 'Participation is voluntary. By selecting Yes, you agree to record your current location for this survey. Location capture is required to continue; your browser will ask for permission. Be at the proposed outlet when completing the survey.' } : q.id === 'outletGps' ? { ...q, section: 'A', required: true, label: 'Capture your current location', help: 'Location capture starts automatically after consent. Enable precise location permission. A valid GPS reading is required to continue.' } : q) };
 }
-Object.assign(initialQuestionnaire, requireLocation(initialQuestionnaire));
+Object.assign(legacyQuestionnaire, requireLocation(legacyQuestionnaire));
+
+export const initialQuestionnaire = createNetworkProfile(legacyQuestionnaire.questions.find(q => q.id === 'outletGps'), legacyQuestionnaire.questions.find(q => q.id === 'adrehs'), districts);
 
 export function isVisible(q, a) {
+  if (q.profile) return profileVisible(q, a);
   if (q.id === 'consent') return true;
   if (a.consent !== 'Yes') return false;
   if (['onSite', 'gpsConsent', 'gpsStatus', 'gpsFailureReason'].includes(q.id)) return false;
@@ -102,10 +106,15 @@ export function validateAnswers(schema, answers, section) {
   const errors = {};
   for (const q of schema.questions.filter(q => (!section || q.section === section) && isVisible(q, answers))) {
     const value = answers[q.id];
-    const empty = value == null || value === '' || (Array.isArray(value) && !value.length);
+    const empty = value == null || (typeof value === 'string' && !value.trim()) || (Array.isArray(value) && !value.length);
     if (q.required && empty) { errors[q.id] = 'Please answer this question.'; continue; }
     if (empty) continue;
-    if (q.type === 'multi') {
+    if (q.type === 'calculated') continue;
+    if (q.type === 'repeat') {
+      if (!Array.isArray(value) || !value.length || value.length > 50 || value.some(row => !row || typeof row.institution !== 'string' || !row.institution.trim() || row.institution.length > 200 || typeof row.paymentType !== 'string' || !row.paymentType.trim() || row.paymentType.length > 200)) errors[q.id] = 'Add an institution and payment type for each row (up to 50).';
+    } else if (q.type === 'number') {
+      if (typeof value !== 'string' || !/^\d+(\.\d+)?$/.test(value) || !Number.isFinite(Number(value)) || Number(value) < (q.min ?? 0) || (q.integer && !Number.isInteger(Number(value)))) errors[q.id] = q.integer ? 'Enter a valid whole number.' : 'Enter a valid nonnegative amount.';
+    } else if (q.type === 'multi') {
       if (!Array.isArray(value) || value.some(v => !q.options.includes(v)) || new Set(value).size !== value.length) errors[q.id] = 'Select valid choices.';
       else if (q.maxChoices && value.length > q.maxChoices) errors[q.id] = `Choose up to ${q.maxChoices}.`;
       else if (q.exclusive && value.includes(q.exclusive) && value.length > 1) errors[q.id] = `Select “${q.exclusive}” on its own.`;
@@ -115,22 +124,31 @@ export function validateAnswers(schema, answers, section) {
     } else if (q.type === 'adrehs') {
       if (typeof value !== 'object' || value.publicConsent !== true || typeof value.code !== 'string' || value.code.length > 80) errors[q.id] = 'Confirm public registration permission and provide a valid code.';
     } else if (typeof value !== 'string' || value.length > 2000) errors[q.id] = 'Enter text of up to 2,000 characters.';
+    else if (q.type === 'month' && !/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) errors[q.id] = 'Enter a valid month and year.';
     else if (q.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) errors[q.id] = 'Enter a valid email address.';
     else if (q.type === 'tel' && !/^\+?[\d\s()-]{7,25}$/.test(value)) errors[q.id] = 'Enter a valid phone number.';
     else if (q.type === 'time' && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) errors[q.id] = 'Enter a valid time.';
     else if (q.type === 'date' && (!/^\d{4}-\d{2}-\d{2}$/.test(value) || !Number.isFinite(Date.parse(value)) || new Date(value).toISOString().slice(0, 10) !== value)) errors[q.id] = 'Enter a valid date.';
     if ((value === 'Other' || (Array.isArray(value) && value.includes('Other'))) && (typeof answers[`${q.id}_other`] !== 'string' || !answers[`${q.id}_other`].trim() || answers[`${q.id}_other`].length > 2000)) errors[`${q.id}_other`] = 'Please specify your answer.';
   }
+  if (schema.template === 'existing-agent-network') {
+    if ((!section || section === 'D') && answers.net_datesKnown === 'Dates confirmed' && answers.net_periodAvailable === 'Completed operating days available') {
+      if (answers.net_periodStart && answers.net_periodEnd && answers.net_periodStart > answers.net_periodEnd) errors.net_periodEnd = 'End date must be on or after the start date.';
+      if (answers.net_periodStart && answers.net_periodEnd && Number(answers.net_operatingDays) > (Date.parse(answers.net_periodEnd) - Date.parse(answers.net_periodStart)) / 86400000 + 1) errors.net_operatingDays = 'Operating days cannot exceed the reporting period.';
+    }
+    if ((!section || section === 'B') && answers.net_primaryChannel === 'Email' && !answers.email) errors.email = 'Provide the email address for your preferred channel.';
+  }
   return errors;
 }
 
-export function cleanAnswers(schema, answers) {
+export function cleanAnswers(schema, answers, { trimText = true } = {}) {
   const out = {};
   for (const q of schema.questions.filter(q => isVisible(q, answers))) {
+    if (q.type === 'calculated') { const average = dailyAverage(answers); if (average !== '') out[q.id] = average; continue; }
     if (answers[q.id] === undefined || answers[q.id] === '') continue;
-    out[q.id] = typeof answers[q.id] === 'string' ? answers[q.id].trim() : answers[q.id];
-    if (answers[q.id] === 'Other' || (Array.isArray(answers[q.id]) && answers[q.id].includes('Other'))) out[`${q.id}_other`] = answers[`${q.id}_other`]?.trim();
+    out[q.id] = trimText && typeof answers[q.id] === 'string' ? answers[q.id].trim() : answers[q.id];
+    if (answers[q.id] === 'Other' || (Array.isArray(answers[q.id]) && answers[q.id].includes('Other'))) out[`${q.id}_other`] = trimText ? answers[`${q.id}_other`]?.trim() : answers[`${q.id}_other`];
   }
-  if (out.contactConsent === 'Yes' && out.applicantName) out.contactName = out.applicantName;
+  if (schema.template !== 'existing-agent-network' && out.contactConsent === 'Yes' && out.applicantName) out.contactName = out.applicantName;
   return out;
 }
