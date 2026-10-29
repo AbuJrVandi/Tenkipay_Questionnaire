@@ -14,5 +14,6 @@ try {
   process.exit(1);
 }
 const port = Number(process.env.PORT || 3001);
-const server = app.listen(port, process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1', () => console.log(`TenkiPay API: http://127.0.0.1:${port}`));
+const host = process.env.HOST || '0.0.0.0';
+const server = app.listen(port, host, () => console.log(`TenkiPay API: http://${host}:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => server.close(async () => { await pool.end(); process.exit(0); }));
