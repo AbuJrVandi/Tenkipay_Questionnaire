@@ -39,17 +39,17 @@ try {
   await page.getByRole('button', { name: 'Review response' }).click();
   await page.getByRole('button', { name: 'Submit response' }).click();
   await page.getByRole('heading', { name: 'Thank you. You’re all set.' }).waitFor();
-  const [records] = await pool.query("SELECT id, answers FROM submissions WHERE JSON_UNQUOTE(JSON_EXTRACT(answers, '$.adrehs.code')) = 'WAU QA TEST'");
+  const { rows: records } = await pool.query("SELECT id, answers FROM submissions WHERE answers->'adrehs'->>'code' = 'WAU QA TEST'");
   assert.equal(records.length, 1);
   const answers = typeof records[0].answers === 'string' ? JSON.parse(records[0].answers) : records[0].answers;
   assert.equal(answers.outletGps.latitude, 8.48876); assert.equal(answers.adrehs.district, 'WESTERN AREA URB');
   // Remove only the exact QA record created by this run.
-  await pool.execute('DELETE FROM submissions WHERE id = ?', [records[0].id]);
+  await pool.query('DELETE FROM submissions WHERE id = $1', [records[0].id]);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('http://localhost:5173/form');
   await page.getByText('Do you agree to take part in this questionnaire?', { exact: false }).waitFor();
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: '.local/form-mobile.png', fullPage: true });
   assert.deepEqual(errors, []);
-  console.log('Verified admin login, exports, automatic GPS capture, Adrehs UI, saved MySQL location metadata and mobile layout. External creation mocked; QA record removed.');
+  console.log('Verified admin login, exports, automatic GPS capture, Adrehs UI, saved PostgreSQL location metadata and mobile layout. External creation mocked; QA record removed.');
 } finally { await browser.close(); await pool.end(); }

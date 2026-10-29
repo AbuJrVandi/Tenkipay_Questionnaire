@@ -5,13 +5,13 @@ This guide takes the local application online so people can open the form on the
 ## 1. What you need
 
 - A host that runs a **Node.js server**, with Node.js 22.12 or newer. Node.js 24 is used locally.
-- A **MySQL 8** database.
+- A **PostgreSQL 14** database or newer (PostgreSQL 16 is recommended).
 - A public domain with **HTTPS**.
 - Outbound HTTPS access from the server to `api.adrehs.org`.
 
-The React website and Express API run together. A static-only host or a MySQL Workbench installation alone cannot run the whole application. Workbench is a database management tool.
+The React website and Express API run together. A static-only host or a database management tool alone cannot run the whole application. pgAdmin is a database management tool, not an application host.
 
-For the simplest setup, choose a host that provides HTTPS, a Node.js service and a MySQL database. The steps below work with those services without requiring a particular provider.
+For the simplest setup, choose a host that provides HTTPS, a Node.js service and a PostgreSQL database. The steps below work with those services without requiring a particular provider.
 
 ## 2. Upload the application
 
@@ -21,26 +21,25 @@ Upload the source files, including `package.json`, `package-lock.json`, `src/`, 
 
 ## 3. Create the database
 
-In your host?s database panel:
+In your host's database panel:
 
-1. Create a MySQL database named `tenkipay`, using `utf8mb4`.
+1. Create a PostgreSQL database named `tenkipay`.
 2. Create a user with access to that database.
-3. Save the host, port, username and password for the next step.
+3. Save the host, port, database name, username and password for the next step.
 4. Allow the application server to connect to the database.
 
-If managing MySQL directly, run this as a database administrator and replace the password:
+If managing PostgreSQL directly, run this as a database administrator and replace the password:
 
 ```sql
-CREATE DATABASE tenkipay CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'tenkipay'@'localhost' IDENTIFIED BY 'REPLACE_WITH_A_STRONG_DATABASE_PASSWORD';
-GRANT ALL PRIVILEGES ON tenkipay.* TO 'tenkipay'@'localhost';
+CREATE ROLE tenkipay LOGIN PASSWORD 'REPLACE_WITH_A_STRONG_DATABASE_PASSWORD';
+CREATE DATABASE tenkipay OWNER tenkipay ENCODING 'UTF8' TEMPLATE template0;
 ```
 
-The SQL example assumes the application and MySQL run on the same server. For a separate database host, use the provider?s user and network configuration.
+The SQL example assumes the application and PostgreSQL run on the same server. For a separate database host, use the provider's user and network configuration.
 
 ## 4. Set production settings
 
-Use the host?s private environment-variable settings, or a private `.env` file on the server. Replace every example value below:
+Use the host's private environment-variable settings, or a private `.env` file on the server. Replace every example value below:
 
 ```dotenv
 NODE_ENV=production
@@ -48,12 +47,8 @@ PORT=3001
 APP_ORIGIN=https://survey.your-domain.com
 VITE_PUBLIC_FORM_URL=https://survey.your-domain.com/form
 
-MYSQL_HOST=your-database-host
-MYSQL_PORT=3306
-MYSQL_DATABASE=tenkipay
-MYSQL_USER=tenkipay
-MYSQL_PASSWORD=your-strong-database-password
-MYSQL_SSL=false
+DATABASE_URL=postgres://tenkipay:your-strong-database-password@your-database-host:5432/tenkipay
+DATABASE_SSL=false
 
 ADMIN_EMAIL=your-admin-email@example.com
 ADMIN_PASSWORD=your-unique-password-at-least-14-characters
@@ -68,14 +63,16 @@ ADREHS_API_KEY=
 | `PORT` | The port required by your host; the application reads it at startup |
 | `APP_ORIGIN` | The exact public HTTPS origin, with no `/form` path or trailing slash |
 | `VITE_PUBLIC_FORM_URL` | The complete public form URL; set it before building |
-| `MYSQL_*` | Your production database connection details |
-| `MYSQL_SSL` | `true` if your provider requires verified database TLS; otherwise `false` |
+| `DATABASE_URL` | Your PostgreSQL connection string; URL-encode special characters in the password |
+| `DATABASE_SSL` | `true` if your provider requires verified database TLS; otherwise `false` |
 | `ADMIN_EMAIL` | The administrator email for the new database |
 | `ADMIN_PASSWORD` | A unique password of at least 14 characters |
 | `TRUST_PROXY` | `true` only when exactly one trusted reverse proxy sits in front of Express |
 | `ADREHS_API_KEY` | Leave empty unless Adrehs supplies a key for your integration |
 
-Do not use the local `password123` login in production. Confirm the host?s proxy arrangement before setting `TRUST_PROXY`; it affects client IP detection and rate limiting.
+Some providers require TLS in the connection string instead of `DATABASE_SSL`; in that case append `?sslmode=require` to `DATABASE_URL`. The application also accepts `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` and `PGPASSWORD` instead of `DATABASE_URL`.
+
+Do not use the local `password123` login in production. Confirm the host's proxy arrangement before setting `TRUST_PROXY`; it affects client IP detection and rate limiting.
 
 ## 5. Install, initialize and build
 
@@ -88,7 +85,7 @@ npm test
 npm run build
 ```
 
-`db:setup` creates the tables, initial questionnaire and administrator. It does not create the database itself. If tables already exist, it preserves responses and existing admin passwords.
+`db:setup` creates the tables, initial questionnaire and administrator. It does not create the database or PostgreSQL role itself. If tables already exist, it preserves responses and existing admin passwords.
 
 **Changing `ADMIN_PASSWORD` later does not reset an existing account.** Use a new administrator email with `db:setup` to create a new account, or have the database administrator perform a deliberate password reset. Do not reuse a local database containing the test account without removing or replacing that account.
 
@@ -110,7 +107,7 @@ npm start
 
 Configure the host to keep the process running and restart it after failures or server restarts. Point the HTTPS domain to this service. Forward website and `/api` requests to the same application port.
 
-The application serves `dist/` and the API together. HTTPS is provided by your host or reverse proxy. Do not expose MySQL directly to the public internet.
+The application serves `dist/` and the API together. HTTPS is provided by your host or reverse proxy. Do not expose PostgreSQL directly to the public internet.
 
 ## 7. Check before sharing
 
@@ -135,7 +132,7 @@ If you change the public domain, update `APP_ORIGIN` and `VITE_PUBLIC_FORM_URL`,
 
 ## Keep the system running
 
-- Schedule MySQL backups and test restoring them. Dashboard exports do not include all application tables.
+- Schedule PostgreSQL backups with `pg_dump` and test restoring them. Dashboard exports do not include all application tables.
 - Keep questionnaire versions when restoring data so older answers retain their wording.
 - Save application logs and monitor `/api/health`.
 - Before an update, back up the database, install dependencies, run tests, build and restart.
@@ -147,8 +144,8 @@ If you change the public domain, update `APP_ORIGIN` and `VITE_PUBLIC_FORM_URL`,
 | --- | --- |
 | Phone cannot open the QR link | Use the public HTTPS URL rather than localhost |
 | GPS is unavailable | HTTPS, phone location services and browser location permission |
-| Database is unavailable | Database service, `MYSQL_*` values, network access and required TLS |
-| Requests return ?origin is not allowed? | `APP_ORIGIN` must exactly match the website?s HTTPS origin |
+| Database is unavailable | Database service, `DATABASE_URL`, network access, credentials and required TLS |
+| Requests return "origin is not allowed" | `APP_ORIGIN` must exactly match the website's HTTPS origin |
 | Login fails after changing `.env` | Existing account passwords are preserved by `db:setup` |
 | Form URL returns 404 | Build `dist/` before starting the server; route requests to Express |
 | Adrehs creation fails | Server internet access, API response and Sierra Leone location coverage |
@@ -156,4 +153,4 @@ If you change the public domain, update `APP_ORIGIN` and `VITE_PUBLIC_FORM_URL`,
 
 ## Current status
 
-The application is built and tested locally. A public deployment has not been configured. Hosting, production MySQL, a domain and HTTPS are still needed before public sharing.
+The application is built and tested locally. A public deployment has not been configured. Hosting, production PostgreSQL, a domain and HTTPS are still needed before public sharing.

@@ -1,15 +1,10 @@
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
-$dataDirectory = Join-Path (Get-Location) '.local\mysql'
-$mysqlExecutable = 'C:\Program Files\MySQL\MySQL Server 8.0\bin\mysqld.exe'
 if (-not (Test-Path -LiteralPath '.env')) { throw 'Missing .env. Follow README.md to configure the database first.' }
-$localConnection = Get-NetTCPConnection -LocalPort 3307 -State Listen -ErrorAction SilentlyContinue
-if (-not $localConnection -and (Test-Path -LiteralPath $dataDirectory)) {
-    $mysqlArguments = @('--no-defaults', "--datadir=`"$dataDirectory`"", '--port=3307', '--bind-address=127.0.0.1', '--mysqlx=OFF')
-    Start-Process -FilePath $mysqlExecutable -ArgumentList $mysqlArguments -WindowStyle Hidden
-    for ($attempt = 0; $attempt -lt 30; $attempt++) {
-        if (Get-NetTCPConnection -LocalPort 3307 -State Listen -ErrorAction SilentlyContinue) { break }
-        Start-Sleep -Milliseconds 500
-    }
+$postgresServices = Get-Service -Name 'postgresql*' -ErrorAction SilentlyContinue
+if (-not $postgresServices) { throw 'PostgreSQL is not installed as a Windows service. Install PostgreSQL or start it yourself, then run npm run dev.' }
+if (-not ($postgresServices | Where-Object { $_.Status -eq 'Running' })) {
+    Write-Host 'Starting PostgreSQL...'
+    Start-Service ($postgresServices | Select-Object -First 1)
 }
 node scripts/dev.mjs

@@ -13,5 +13,5 @@ try {
   for (const path of ['/api/health', '/api/admin/analytics', '/api/admin/export/csv', '/api/admin/export/xlsx', '/api/admin/export/json']) assert.equal((await fetch(base + path, { headers: { Cookie: cookie } })).status, 200);
   const schema = await (await fetch(base + '/api/public/questionnaire')).json();
   assert.equal(schema.questions[1].id, 'outletGps');
-  console.log('Verified MySQL connection, requested login, private endpoint protection, location-first schema, analytics and all exports.');
+  console.log('Verified PostgreSQL connection, requested login, private endpoint protection, location-first schema, analytics and all exports.');
 } finally { await new Promise(resolve => server.close(resolve)); await pool.end(); }

@@ -21,7 +21,7 @@ Open PowerShell in the project folder and run:
 .\scripts\start-local.ps1
 ```
 
-Keep the terminal open while using the system. If MySQL is already running, you can also use `npm run dev`.
+Keep the terminal open while using the system. If PostgreSQL is already running and `.env` is configured, you can also use `npm run dev`.
 
 | Page | Local address |
 | --- | --- |
@@ -31,6 +31,10 @@ Keep the terminal open while using the system. If MySQL is already running, you 
 **Local test login:** `test@tenkipay.test` / `password123`.
 
 These credentials are for local testing. Choose a strong password when deploying.
+
+### Local database
+
+The application uses PostgreSQL 14 or newer. Copy `.env.example` to `.env` and set `DATABASE_URL` to a database the application can use, then run `npm run db:setup`. To create a local role and database automatically, run `npm run db:bootstrap` first (set `PG_ADMIN_URL` if your PostgreSQL administrator account is not the default).
 
 ## Use the dashboard
 
@@ -51,19 +55,25 @@ Adrehs registration has a separate public-location permission. Select **Create A
 
 **Phones need a reachable HTTPS form address for GPS capture.** A localhost QR code opens only on the computer running the application. See the deployment guide before sharing publicly.
 
-## View the database in MySQL Workbench
+## View the database in pgAdmin or psql
 
-Create a **Standard TCP/IP** connection:
+Create a PostgreSQL connection:
 
 | Setting | Value |
 | --- | --- |
 | Host | `127.0.0.1` |
-| Port | `3307` |
+| Port | `5432` |
+| Database | `tenkipay` |
 | Username | `tenkipay` |
-| Password | `MYSQL_PASSWORD` from your local `.env` |
-| Default schema | `tenkipay` |
+| Password | The password in `DATABASE_URL` from your local `.env` |
 
-Workbench views the same database used by the application. Its password is different from the dashboard login. This project?s local database is separate from the system MySQL server on port 3306.
+With `psql`, connect using the URL directly:
+
+```sh
+psql "$(grep '^DATABASE_URL=' .env | cut -d= -f2-)"
+```
+
+pgAdmin and psql view the same database used by the application. Its password is different from the dashboard login.
 
 ## Project files
 
@@ -83,8 +93,9 @@ Workbench views the same database used by the application. Its password is diffe
 | Command | Purpose |
 | --- | --- |
 | `npm ci` | Install the locked dependencies |
-| `npm run dev` | Start local development; MySQL must be running |
+| `npm run dev` | Start local development; PostgreSQL must be running |
 | `npm test` | Check questionnaire rules |
+| `npm run db:bootstrap` | Create a local PostgreSQL role and database |
 | `npm run db:setup` | Initialize a configured database with a strong admin password |
 | `npm run build` | Build the website |
 | `npm start` | Serve the built website and API |
